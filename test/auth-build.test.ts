@@ -5,10 +5,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { createExtension, createPollHandler } from "../src/index.js";
-import { createJiraClient, resolveCredentials } from "../src/jira-client.js";
+import { createJiraClient, type JiraIssue, resolveCredentials } from "../src/jira-client.js";
 import { resolveParams } from "../src/params.js";
 import { pollJiraIssues } from "../src/poll.js";
-import { pollRequest, rejection, catchSync } from "./helpers.js";
+import { noRedact, pollRequest, rejection, catchSync } from "./helpers.js";
 import { type FakeResponse, fixture, startFakeJira } from "./fake-jira-server.js";
 
 const ROOT = join(import.meta.dir, "..");
@@ -135,6 +135,81 @@ describe("credentials", () => {
   });
 });
 
+describe("item redaction (D-6)", () => {
+  const token = "review-dummy-token";
+  const email = "ana@example.com";
+  const basic = Buffer.from(`${email}:${token}`).toString("base64");
+
+  /** One successful handler poll over the fake, after a committed empty baseline. */
+  async function pollIssue(edit: (issue: JiraIssue) => void) {
+    const issue = fixture<JiraIssue>("issue-plat-1201.json");
+    edit(issue);
+    const jira = await startFakeJira({ issues: [issue] });
+    try {
+      const handler = createPollHandler({
+        env: { JIRA_EMAIL: email, JIRA_API_TOKEN: token },
+        stderr: { write: () => true },
+      });
+      const committed = { v: 1, fp: resolveParams({ site: jira.site }).fingerprint, seen: {} };
+      const result = await handler(pollRequest(committed, { params: { site: jira.site } }));
+      expect(result.items.map(item => item.key)).toEqual(["PLAT-1201"]);
+      expect(JSON.stringify(result.state)).not.toContain(token);
+      return result.items[0]!;
+    } finally {
+      await jira.close();
+    }
+  }
+
+  test("UT-050 credentials: a token in a long summary tail is redacted from the item summary", async () => {
+    const item = await pollIssue(issue => {
+      issue.fields.summary = `${"x".repeat(205)} ${token}`;
+    });
+    expect(JSON.stringify(item)).not.toContain(token);
+    expect(item.summary).toEndWith(`\n${"x".repeat(205)} [redacted]`);
+  });
+
+  test("UT-050 credentials: a token in a short title is redacted and other text is kept", async () => {
+    const item = await pollIssue(issue => {
+      issue.fields.summary = `Rotate ${token} (not review-dummy-tok)`;
+    });
+    expect(item.key).toBe("PLAT-1201");
+    expect(item.title).toBe("PLAT-1201 Rotate [redacted] (not review-dummy-tok)");
+    expect(item.url).toEndWith("/browse/PLAT-1201");
+  });
+
+  test("UT-050 credentials: a token in attributes is redacted from labels and names", async () => {
+    const item = await pollIssue(issue => {
+      issue.fields.labels = ["checkout", `leak-${token}`];
+      issue.fields.reporter = { displayName: `Ana ${token}` };
+    });
+    expect(JSON.stringify(item)).not.toContain(token);
+    expect(item.attributes).toMatchObject({ labels: ["checkout", "leak-[redacted]"], reporter: "Ana [redacted]" });
+    expect(item.summary).toContain("reporter: Ana [redacted]");
+  });
+
+  test("UT-050 credentials: the base64 Basic credential is redacted too", async () => {
+    const item = await pollIssue(issue => {
+      issue.fields.summary = `auth ${basic}`;
+      issue.fields.assignee = { displayName: basic };
+    });
+    expect(JSON.stringify(item)).not.toContain(basic);
+    expect(item.title).toBe("PLAT-1201 auth [redacted]");
+    expect(item.attributes).toMatchObject({ assignee: "[redacted]", project: "PLAT", status: "To Do" });
+  });
+
+  test("UT-050 credentials: item text without the token is left unchanged", async () => {
+    const item = await pollIssue(issue => {
+      issue.fields.labels = [`${token}`];
+    });
+    const expected = fixture<typeof item>("item-plat-1201.json");
+    expect(item).toEqual({
+      ...expected,
+      url: item.url,
+      attributes: { ...(expected.attributes as Record<string, unknown>), labels: ["[redacted]"] },
+    });
+  });
+});
+
 describe("build", () => {
   const expectManifest = (manifest: string) => {
     expect(manifest).toMatch(/min_compozy_version = "0\.7\.0"/);
@@ -188,7 +263,7 @@ describe("entry point", () => {
     try {
       const params = resolveParams({ site: jira.site });
       const client = createJiraClient(jira.site, { email: "a@b.c", apiToken: "x" });
-      const error = await rejection(pollJiraIssues(pollRequest(), { client, params }));
+      const error = await rejection(pollJiraIssues(pollRequest(), { client, params, redact: noRedact }));
       expect(error.data).toEqual({ code: "source_extension_failed" });
     } finally {
       await jira.close();

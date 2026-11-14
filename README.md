@@ -70,6 +70,9 @@ anything:
 compozy agent instance check jira-watch --workspace my-project --dry-run
 ```
 
+With the `HEARTBEAT.md` below (`backfill: "24h"`) and no matching issue created in the last 24 hours,
+the preview shows 0 items:
+
 ```text
 Would run: no
 Sources:
@@ -77,8 +80,9 @@ Sources:
 Digest:
 ```
 
-A dry run never commits state, so it always previews a quiet baseline here. Turn checks on so the
-first real check records what already matches (it reports nothing and costs no model turn):
+A dry run never commits state, so until a real check has run it keeps previewing the baseline:
+0 items, or only the issues created within `backfill` when that is set. Turn checks on and let the
+first real check finish; it records what already matches (reporting only backfill matches, if any):
 
 ```bash
 compozy agent instance checks on jira-watch --workspace my-project
@@ -88,7 +92,8 @@ compozy agent instance checks on jira-watch --workspace my-project
 Checks on for Jira Watch in my-project
 ```
 
-When an issue is later assigned to you, the next check (or a dry run) shows it:
+The new issue appears only after that first real check has completed. From then on, when an issue
+starts matching the `jql`, the next check (or a dry run) shows it:
 
 ```text
 Would run: yes

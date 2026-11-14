@@ -8,8 +8,16 @@ const MAX_SUMMARY_BYTES = 1024;
 const MAX_ATTRIBUTES_BYTES = 2048;
 const MAX_ATTRIBUTE_CHARS = 100;
 
-export function toItem(issue: JiraIssue, site: string): HeartbeatSourceItem {
-  const f = issue.fields;
+/** Maps one issue to a sourced item; `redact` runs on every field string before any clipping (D-6). */
+export function toItem(
+  issue: JiraIssue,
+  site: string,
+  redact: (text: string) => string
+): HeartbeatSourceItem {
+  // Every string Jira sent (summary, names, labels, dates) is redacted; the issue key is not.
+  const f: JiraIssue["fields"] = JSON.parse(JSON.stringify(issue.fields), (_name, value: unknown) =>
+    typeof value === "string" ? redact(value) : value
+  );
   const created = isoUtc(f.created);
   const summaryParts = [
     f.issuetype?.name,

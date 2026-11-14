@@ -6,7 +6,7 @@ import { createJiraClient, REQUEST_TIMEOUT_MS } from "../src/jira-client.js";
 import { resolveParams } from "../src/params.js";
 import { pollJiraIssues } from "../src/poll.js";
 import { type FakeJira, fixture, startFakeJira } from "./fake-jira-server.js";
-import { jiraIssue, keys, pollRequest, rejection } from "./helpers.js";
+import { jiraIssue, keys, noRedact, pollRequest, rejection } from "./helpers.js";
 
 const credentials = { email: "ana@example.com", apiToken: "t0k" };
 const signal = () => new AbortController().signal;
@@ -25,6 +25,7 @@ async function poll(state: unknown, params: Record<string, unknown> = {}) {
   return await pollJiraIssues(pollRequest(state, { params: { site: jira.site, ...params } }), {
     client: client(),
     params: resolved,
+    redact: noRedact,
   });
 }
 
@@ -186,7 +187,7 @@ describe("jira-client + poll against the fake HTTP server", () => {
     jira.issues = keys("PLAT", 1, 10).map(k => jiraIssue(k));
     const params = resolveParams({ site: jira.site });
     const request = pollRequest(null, { limits: { max_items: 20, max_summary_bytes: 1024, max_state_bytes: 80 } });
-    const error = await rejection(pollJiraIssues(request, { client: client(), params }));
+    const error = await rejection(pollJiraIssues(request, { client: client(), params, redact: noRedact }));
     expect(error.data).toEqual({ code: "source_params_invalid" });
     expect(error.message).toBe(
       "JQL matches more than 4 issues, more than fit in max_state_bytes=80; " +

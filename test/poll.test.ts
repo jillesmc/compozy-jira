@@ -4,14 +4,14 @@ import type { JiraClient } from "../src/jira-client.js";
 import { resolveParams } from "../src/params.js";
 import { POLL_BUDGET_MS, pollJiraIssues } from "../src/poll.js";
 import { sourceError } from "../src/errors.js";
-import { fakeClient, keys, pollRequest, rejection, SITE } from "./helpers.js";
+import { fakeClient, keys, noRedact, pollRequest, rejection, SITE } from "./helpers.js";
 
 const params = resolveParams({ site: SITE, jql: "project = PLAT" });
 const state = (seen: Record<string, number[]>, fp = params.fingerprint) => ({ v: 1, fp, seen });
 const itemKeys = (result: { items: Array<{ key: string }> }) => result.items.map(item => item.key);
 
 async function poll(committed: unknown, client: JiraClient, overrides = {}, p = params) {
-  return await pollJiraIssues(pollRequest(committed, overrides), { client, params: p });
+  return await pollJiraIssues(pollRequest(committed, overrides), { client, params: p, redact: noRedact });
 }
 
 describe("poll", () => {

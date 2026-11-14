@@ -90,3 +90,6 @@ export function catchSync(fn: () => unknown): SourceError {
   }
   throw new Error("expected a throw");
 }
+
+/** Identity redaction for unit tests that bind no secret. */
+export const noRedact = (text: string): string => text;

@@ -15,7 +15,13 @@ export const MAX_DETAIL_CANDIDATES = 200;
 
 export async function pollJiraIssues(
   request: HeartbeatSourceRequest,
-  deps: { client: JiraClient; params: JiraSourceParams; budgetMs?: number }
+  deps: {
+    client: JiraClient;
+    params: JiraSourceParams;
+    /** Bound-secret redaction applied to every item string (D-6); see `redactor`. */
+    redact: (text: string) => string;
+    budgetMs?: number;
+  }
 ): Promise<HeartbeatSourceResult> {
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -27,7 +33,7 @@ export async function pollJiraIssues(
     }, deps.budgetMs ?? POLL_BUDGET_MS);
   });
   try {
-    return await Promise.race([run(request, deps.client, deps.params, controller.signal), budget]);
+    return await Promise.race([run(request, deps, controller.signal), budget]);
   } finally {
     clearTimeout(timer);
   }
@@ -35,8 +41,7 @@ export async function pollJiraIssues(
 
 async function run(
   request: HeartbeatSourceRequest,
-  client: JiraClient,
-  params: JiraSourceParams,
+  { client, params, redact }: Parameters<typeof pollJiraIssues>[1],
   signal: AbortSignal
 ): Promise<HeartbeatSourceResult> {
   const { max_items: maxItems, max_state_bytes: maxStateBytes } = request.limits;
@@ -83,7 +88,7 @@ async function run(
     .slice(0, maxItems);
   const returned = details.map(issue => issue.key);
   return {
-    items: details.map(issue => toItem(issue, params.site)),
+    items: details.map(issue => toItem(issue, params.site, redact)),
     state: nextState([...seen0, ...returned]),
     more: fresh.length > returned.length,
   };

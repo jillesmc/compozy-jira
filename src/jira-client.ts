@@ -60,6 +60,19 @@ export function resolveCredentials(env: Record<string, string | undefined>): Jir
   return { email, apiToken };
 }
 
+function basicCredential(credentials: JiraCredentials): string {
+  return Buffer.from(`${credentials.email}:${credentials.apiToken}`).toString("base64");
+}
+
+/**
+ * Replaces the bound token, raw or as the base64 Basic credential, with `[redacted]`. Jira may echo
+ * request input back, so every outward string (errors and items) passes through this.
+ */
+export function redactor(credentials: JiraCredentials): (text: string) => string {
+  const secrets = [credentials.apiToken, basicCredential(credentials)];
+  return text => secrets.reduce((out, secret) => out.split(secret).join("[redacted]"), text);
+}
+
 export function createJiraClient(
   site: string,
   credentials: JiraCredentials,
@@ -68,14 +81,8 @@ export function createJiraClient(
   const doFetch = options.fetch ?? fetch;
   const timeoutMs = options.requestTimeoutMs ?? REQUEST_TIMEOUT_MS;
   const url = `${siteBaseUrl(site)}${SEARCH_PATH}`;
-  const authorization = `Basic ${Buffer.from(`${credentials.email}:${credentials.apiToken}`).toString("base64")}`;
-
-  // Jira may echo request input back; the bound token never leaves in an error message.
-  const redact = (text: string) =>
-    [credentials.apiToken, authorization.slice("Basic ".length)].reduce(
-      (out, secret) => out.split(secret).join("[redacted]"),
-      text
-    );
+  const authorization = `Basic ${basicCredential(credentials)}`;
+  const redact = redactor(credentials);
 
   async function search(body: Record<string, unknown>, signal: AbortSignal): Promise<SearchPage> {
     const timeout = AbortSignal.timeout(timeoutMs);

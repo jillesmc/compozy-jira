@@ -8,7 +8,7 @@ import {
 } from "@compozy/extension-sdk";
 
 import { SourceError, sourceError } from "./errors.js";
-import { createJiraClient, resolveCredentials } from "./jira-client.js";
+import { createJiraClient, redactor, resolveCredentials } from "./jira-client.js";
 import { PARAMS_SCHEMA, resolveParams } from "./params.js";
 import { pollJiraIssues } from "./poll.js";
 
@@ -38,24 +38,22 @@ export function createPollHandler(deps: JiraExtensionDeps = {}) {
   const env = deps.env ?? process.env;
   const stderr = deps.stderr ?? process.stderr;
   return async (request: HeartbeatSourceRequest): Promise<HeartbeatSourceResult> => {
+    let redact = (text: string) => text;
     try {
       const params = resolveParams(request.params);
       const credentials = resolveCredentials(env);
+      redact = redactor(credentials);
       const client = createJiraClient(params.site, credentials, { fetch: deps.fetch });
-      return await pollJiraIssues(request, { client, params });
+      return await pollJiraIssues(request, { client, params, redact });
     } catch (error) {
       let failure =
         error instanceof SourceError
           ? error
           : sourceError("source_extension_failed", "Jira source failed unexpectedly");
       // Last line of defense: no outward message carries the bound token, whatever the path.
-      const token = env.JIRA_API_TOKEN?.trim();
-      if (token && failure.message.includes(token)) {
-        failure = sourceError(
-          failure.data!.code,
-          failure.message.split(token).join("[redacted]"),
-          failure.httpStatus
-        );
+      const message = redact(failure.message);
+      if (message !== failure.message) {
+        failure = sourceError(failure.data!.code, message, failure.httpStatus);
       }
       // Code and HTTP status only: never the token, the JQL results, or issue text.
       stderr.write(
