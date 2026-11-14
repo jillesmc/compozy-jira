@@ -545,3 +545,18 @@ documents how each affects this source.
   sorts `requires_env`, so the manifest lists `["JIRA_API_TOKEN", "JIRA_EMAIL"]`; UT-060 compares the
   set, not the order. UT-060's real-build case is skipped when the `compozy` CLI is absent (CI); the
   describe-payload case always runs.
+
+- **D-3 (2026-11-14, final review R-3): the exact capacity check covers the whole current match
+  set.** Poll step 7 only encoded `seen0 ∪ returned`, so a match set that passes the coarse
+  key-count guard but does not fit `max_state_bytes` (for example 3,000 six-digit keys) returned a
+  partial page instead of failing. Business Rule 6 and US-001.EC-3 govern: before returning, the poll
+  also exact-encodes the full `current` set (as a `SeenStateV1` with the same fingerprint) and fails
+  with `source_params_invalid` (count and limit) when it does not fit. The next-state encode check in
+  step 7 stays. This is a clarification toward the approved product rule, not a product change.
+- **D-4 (2026-11-14, final review R-4): golden path transcript corrected.** A dry run never commits
+  state, so `_dx.md` Golden Path now turns checks on (the first real check is the quiet baseline)
+  before showing a later new issue. The README follows the same order.
+- **D-5 (2026-11-14, final review R-5): long titles keep the full issue text in `summary`.** Per
+  US-005.EC-1, when the title is shortened, the item `summary` carries the metadata line followed by a
+  newline and the full issue summary text, clipped to the 1 KiB summary limit without splitting a
+  character. Items whose title is not shortened keep the exact `_dx.md` shape (UT-040).

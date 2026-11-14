@@ -45,16 +45,8 @@ Sources:
 Digest:
 ```
 
-The first check records what already matches and reports nothing. When an issue is later assigned
-to you:
-
-```text
-Would run: yes
-Sources:
-  my-jira  jira/issues  ok  1 item  (702 ms)
-Digest:
-  source:my-jira:PLAT-1201  PLAT-1201 Checkout fails on Pix
-```
+A dry run never commits state, so it always previews a quiet baseline here. Turn checks on so the
+first real check records what already matches (it reports nothing and costs no model turn):
 
 ```bash
 compozy agent instance checks on jira-watch --workspace my-project
@@ -62,6 +54,16 @@ compozy agent instance checks on jira-watch --workspace my-project
 
 ```text
 Checks on for Jira Watch in my-project
+```
+
+When an issue is later assigned to you, the next check (or a dry run) shows it:
+
+```text
+Would run: yes
+Sources:
+  my-jira  jira/issues  ok  1 item  (702 ms)
+Digest:
+  source:my-jira:PLAT-1201  PLAT-1201 Checkout fails on Pix
 ```
 
 In the app: agent profile → **Setup → Heartbeat** → **Sources → Add a source** → **Reads**: *New Jira
