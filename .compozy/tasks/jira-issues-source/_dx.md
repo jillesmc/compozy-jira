@@ -45,8 +45,9 @@ Sources:
 Digest:
 ```
 
-A dry run never commits state, so it always previews a quiet baseline here. Turn checks on so the
-first real check records what already matches (it reports nothing and costs no model turn):
+A dry run never commits state, so until a real check has run it keeps previewing the baseline:
+0 items, or only the issues created within `backfill` when that is set. Turn checks on and let the
+first real check finish; it records what already matches (reporting only backfill matches, if any):
 
 ```bash
 compozy agent instance checks on jira-watch --workspace my-project
@@ -56,7 +57,7 @@ compozy agent instance checks on jira-watch --workspace my-project
 Checks on for Jira Watch in my-project
 ```
 
-When an issue is later assigned to you, the next check (or a dry run) shows it:
+After that baseline check has completed, when an issue is later assigned to you, the next check (or a dry run) shows it:
 
 ```text
 Would run: yes

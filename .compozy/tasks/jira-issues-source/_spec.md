@@ -560,3 +560,9 @@ documents how each affects this source.
   US-005.EC-1, when the title is shortened, the item `summary` carries the metadata line followed by a
   newline and the full issue summary text, clipped to the 1 KiB summary limit without splitting a
   character. Items whose title is not shortened keep the exact `_dx.md` shape (UT-040).
+- **D-6 (2026-11-14, final review R-7 and R-4 round 2): item text is redacted and the golden path
+  states the backfill exception.** Business Rule 9 covers successful items as well: the bound
+  `JIRA_API_TOKEN` (raw and as the base64 Basic credential) is replaced with `[redacted]` in every
+  item string (title, summary, attributes) before clipping, so reflected Jira text cannot return it.
+  The `_dx.md` Golden Path now says the uncommitted preview returns 0 items or only the `backfill`
+  matches, and that the new issue appears only after the first real check completed.
