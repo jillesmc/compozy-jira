@@ -44,10 +44,19 @@ export function createPollHandler(deps: JiraExtensionDeps = {}) {
       const client = createJiraClient(params.site, credentials, { fetch: deps.fetch });
       return await pollJiraIssues(request, { client, params });
     } catch (error) {
-      const failure =
+      let failure =
         error instanceof SourceError
           ? error
           : sourceError("source_extension_failed", "Jira source failed unexpectedly");
+      // Last line of defense: no outward message carries the bound token, whatever the path.
+      const token = env.JIRA_API_TOKEN?.trim();
+      if (token && failure.message.includes(token)) {
+        failure = sourceError(
+          failure.data!.code,
+          failure.message.split(token).join("[redacted]"),
+          failure.httpStatus
+        );
+      }
       // Code and HTTP status only: never the token, the JQL results, or issue text.
       stderr.write(
         `jira/issues poll failed: code=${failure.data?.code} status=${failure.httpStatus ?? "-"}\n`

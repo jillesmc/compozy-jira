@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { createServer } from "node:http";
+import type { AddressInfo, Socket } from "node:net";
 
 import { createJiraClient, REQUEST_TIMEOUT_MS } from "../src/jira-client.js";
 import { resolveParams } from "../src/params.js";
@@ -127,6 +129,43 @@ describe("jira-client + poll against the fake HTTP server", () => {
     const error = await rejection(client({ requestTimeoutMs: 1_000 }).listKeys("x", 100, signal()));
     expect(error.data).toEqual({ code: "source_extension_failed" });
     expect(error.message).toBe("Jira request failed: no answer within 1s");
+  });
+
+  test("IT-010 client: a body that stalls after the headers times out, not a JQL error (R-6)", async () => {
+    const sockets = new Set<Socket>();
+    const stall = createServer((req, res) => {
+      req.resume();
+      req.on("end", () => {
+        res.writeHead(Number(req.headers["x-status"] ?? 400), { "Content-Type": "application/json" });
+        res.write("{"); // then never finish the body
+      });
+    });
+    stall.on("connection", socket => sockets.add(socket));
+    await new Promise<void>(resolve => stall.listen(0, "127.0.0.1", resolve));
+    const site = `127.0.0.1:${(stall.address() as AddressInfo).port}`;
+    try {
+      for (const status of ["400", "200"]) {
+        const stallingFetch = ((input: string, init: RequestInit) =>
+          fetch(input, {
+            ...init,
+            headers: { ...(init.headers as Record<string, string>), "x-status": status },
+          })) as typeof fetch;
+        const stalled = createJiraClient(site, credentials, { fetch: stallingFetch, requestTimeoutMs: 100 });
+        const error = await rejection(stalled.listKeys("x", 100, signal()));
+        expect(error.data).toEqual({ code: "source_extension_failed" });
+        expect(error.message).toBe("Jira request failed: no answer within 0.1s");
+      }
+    } finally {
+      for (const socket of sockets) socket.destroy();
+      await new Promise<void>(resolve => stall.close(() => resolve()));
+    }
+  });
+
+  test("IT-004 client: a complete but malformed 400 body still reads Bad Request (R-6)", async () => {
+    jira.respond = () => ({ status: 400, body: "{not json" });
+    const error = await rejection(client().listKeys("x", 100, signal()));
+    expect(error.data).toEqual({ code: "source_params_invalid" });
+    expect(error.message).toBe("Jira rejected the JQL: Bad Request");
   });
 
   test("IT-011 client: a 404 HTML page means no Jira Cloud site", async () => {

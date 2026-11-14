@@ -9,7 +9,7 @@ import { createJiraClient, resolveCredentials } from "../src/jira-client.js";
 import { resolveParams } from "../src/params.js";
 import { pollJiraIssues } from "../src/poll.js";
 import { pollRequest, rejection, catchSync } from "./helpers.js";
-import { fixture, startFakeJira } from "./fake-jira-server.js";
+import { type FakeResponse, fixture, startFakeJira } from "./fake-jira-server.js";
 
 const ROOT = join(import.meta.dir, "..");
 
@@ -62,6 +62,53 @@ describe("credentials", () => {
     } finally {
       await jira.close();
     }
+  });
+
+  test("UT-050 credentials: a token reflected by Jira is redacted from every handler error (R-2)", async () => {
+    const token = "review-dummy-token";
+    const jira = await startFakeJira();
+    const handler = createPollHandler({
+      env: { JIRA_EMAIL: "ana@example.com", JIRA_API_TOKEN: token },
+      stderr: { write: () => true },
+    });
+    const run = async (response: FakeResponse) => {
+      jira.respond = () => response;
+      return await rejection(handler(pollRequest(null, { params: { site: jira.site } })));
+    };
+    try {
+      const jql = await run({ status: 400, body: { errorMessages: [`Invalid input ${token}`] } });
+      expect(jql.data).toEqual({ code: "source_params_invalid" });
+      expect(jql.message).toBe("Jira rejected the JQL: Invalid input [redacted]");
+
+      const errors = await run({ status: 400, body: { errors: { jql: `Field '${token}' does not exist` } } });
+      expect(errors.message).toBe("Jira rejected the JQL: Field '[redacted]' does not exist");
+
+      // Redaction happens before the 300-character clip, so no token prefix survives the cut.
+      const straddling = await run({ status: 400, body: { errorMessages: [`${"a".repeat(290)} ${token}`] } });
+      expect(straddling.message).not.toContain(token.slice(0, 5));
+
+      const status = await run({ status: 502, statusText: `Bad Gateway ${token}` });
+      expect(status.data).toEqual({ code: "source_extension_failed" });
+      expect(status.message).toBe("Jira request failed: 502 Bad Gateway [redacted]");
+
+      const expired = await run({ status: 401, body: { errorMessages: [token] } });
+      expect(expired.message).toBe(
+        "Jira rejected the credentials for ana@example.com; create a new API token and bind JIRA_API_TOKEN again"
+      );
+    } finally {
+      await jira.close();
+    }
+  });
+
+  test("UT-050 credentials: the handler redacts the token on paths that echo other input (R-2)", async () => {
+    const handler = createPollHandler({
+      env: { JIRA_EMAIL: "ana@example.com", JIRA_API_TOKEN: "acme-secret" },
+      fetch: (async () => new Response("<html>Not Found</html>", { status: 404 })) as unknown as typeof fetch,
+      stderr: { write: () => true },
+    });
+    const error = await rejection(handler(pollRequest(null, { params: { site: "acme-secret.atlassian.net" } })));
+    expect(error.data).toEqual({ code: "source_params_invalid" });
+    expect(error.message).toBe("no Jira Cloud site at [redacted].atlassian.net");
   });
 
   test("UT-051 credentials: a missing token names JIRA_API_TOKEN and the secrets command", () => {

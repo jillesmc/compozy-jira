@@ -128,6 +128,26 @@ describe("poll", () => {
     expect(result.state).toEqual(state({ PLAT: Array.from({ length: 40 }, (_, i) => i + 1) }));
   });
 
+  const capacityMessage = (count: number) =>
+    `JQL matches ${count} issues, more than fit in max_state_bytes=16384; ` +
+    "narrow it or raise agents.heartbeat.sources.max_state_bytes";
+
+  test("UT-031 poll: a match set under the listing guard but over max_state_bytes fails on a diff poll (D-3)", async () => {
+    const current = keys("PLAT", 100000, 102999); // 3,000 keys < 4,080 guard, ~21 KiB encoded
+    const error = await rejection(poll(state({}), fakeClient({ current })));
+    expect(error.data).toEqual({ code: "source_params_invalid" });
+    expect(error.message).toBe(capacityMessage(3000));
+  });
+
+  test("UT-031 poll: a match set over max_state_bytes fails on a backfill baseline (D-3)", async () => {
+    const p = resolveParams({ site: SITE, jql: "project = PLAT", backfill: "24h" });
+    const current = keys("PLAT", 100000, 102999);
+    const client = fakeClient({ current, window: current.slice(-2900) });
+    const error = await rejection(poll(null, client, {}, p));
+    expect(error.data).toEqual({ code: "source_params_invalid" });
+    expect(error.message).toBe(capacityMessage(3000));
+  });
+
   test("UT-032 poll: the listing guard is floor((max_state_bytes - 64) / 4) keys", async () => {
     const seen: number[] = [];
     const client = fakeClient({ current: [] });

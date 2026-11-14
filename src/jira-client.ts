@@ -70,8 +70,17 @@ export function createJiraClient(
   const url = `${siteBaseUrl(site)}${SEARCH_PATH}`;
   const authorization = `Basic ${Buffer.from(`${credentials.email}:${credentials.apiToken}`).toString("base64")}`;
 
+  // Jira may echo request input back; the bound token never leaves in an error message.
+  const redact = (text: string) =>
+    [credentials.apiToken, authorization.slice("Basic ".length)].reduce(
+      (out, secret) => out.split(secret).join("[redacted]"),
+      text
+    );
+
   async function search(body: Record<string, unknown>, signal: AbortSignal): Promise<SearchPage> {
+    const timeout = AbortSignal.timeout(timeoutMs);
     let response: Response;
+    let text: string;
     try {
       response = await doFetch(url, {
         method: "POST",
@@ -81,18 +90,19 @@ export function createJiraClient(
           "Content-Type": "application/json",
         },
         body: JSON.stringify(body),
-        signal: AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]),
+        signal: AbortSignal.any([signal, timeout]),
       });
-    } catch (error) {
+      // The body read shares the request's abort and timeout handling.
+      text = await response.text();
+    } catch {
       if (signal.aborted) throw signal.reason;
-      const timedOut = error instanceof Error && error.name === "TimeoutError";
       throw sourceError(
         "source_extension_failed",
-        `Jira request failed: ${timedOut ? `no answer within ${timeoutMs / 1000}s` : "network error"}`
+        `Jira request failed: ${timeout.aborted ? `no answer within ${timeoutMs / 1000}s` : "network error"}`
       );
     }
-    if (!response.ok) throw await httpError(response, site, credentials.email);
-    const page = (await response.json().catch(() => null)) as SearchPage | null;
+    if (!response.ok) throw httpError(response, parseJson(text), site, credentials.email, redact);
+    const page = parseJson(text) as SearchPage | null;
     if (!page || !Array.isArray(page.issues)) {
       throw sourceError("source_extension_failed", "Jira request failed: unexpected response", response.status);
     }
@@ -130,16 +140,30 @@ interface SearchPage {
   nextPageToken?: unknown;
 }
 
-async function httpError(response: Response, site: string, email: string) {
+function parseJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+function httpError(
+  response: Response,
+  json: unknown,
+  site: string,
+  email: string,
+  redact: (text: string) => string
+) {
   const status = response.status;
   switch (status) {
     case 400: {
-      const body = (await response.json().catch(() => null)) as { errorMessages?: unknown; errors?: unknown } | null;
+      const body = json as { errorMessages?: unknown; errors?: unknown } | null;
       const messages = [
         ...(Array.isArray(body?.errorMessages) ? body.errorMessages : []),
         ...(body?.errors && typeof body.errors === "object" ? Object.values(body.errors) : []),
       ].filter((m): m is string => typeof m === "string");
-      const text = (messages.join(" ") || "Bad Request").slice(0, 300);
+      const text = redact(messages.join(" ") || "Bad Request").slice(0, 300);
       return sourceError("source_params_invalid", `Jira rejected the JQL: ${text}`, status);
     }
     case 401:
@@ -161,7 +185,7 @@ async function httpError(response: Response, site: string, email: string) {
     default:
       return sourceError(
         "source_extension_failed",
-        `Jira request failed: ${status} ${response.statusText}`.trim(),
+        redact(`Jira request failed: ${status} ${response.statusText}`.trim()),
         status
       );
   }

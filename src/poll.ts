@@ -53,6 +53,8 @@ async function run(
   const committed = decodeState(request.state);
   const baseline = committed === null || committed.fp !== params.fingerprint;
   const current = await list(params.jql);
+  // The whole match set must be trackable, not just this page's next state (D-3).
+  encodeState({ v: 1, fp: params.fingerprint, seen: seenFromKeys(current) }, maxStateBytes, current.length);
   let seen0: Set<string>;
   if (baseline) {
     const window = new Set(
