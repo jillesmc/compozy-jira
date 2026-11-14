@@ -320,7 +320,7 @@ Params schema (sent as `params_schema`; the daemon validates it before calling t
   "additionalProperties": false,
   "required": ["site"],
   "properties": {
-    "site": { "type": "string", "pattern": "^[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)+$", "maxLength": 253 },
+    "site": { "type": "string", "pattern": "^([A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)+|(127\\.0\\.0\\.1|localhost):[0-9]{1,5})$", "maxLength": 253 },
     "jql": { "type": "string", "maxLength": 4000 },
     "backfill": { "type": "string", "pattern": "^[0-9]+(m|h)$" }
   }
@@ -404,8 +404,7 @@ documents how each affects this source.
 - Integration tests cover `jira-client` plus `poll` against the fake HTTP server (auth header,
   pagination, error mapping, timeouts).
 - E2E runs through the public surface. The local daemon installs the built generation, and dry runs
-  go against the fake Jira, through a `site` pointing to `127.0.0.1:<port>`. A test-only `JIRA_BASE_URL`
-  override enables plain http (see Assumptions). One operator-run journey goes against real Jira Cloud.
+  go against the fake Jira, through a `site` pointing to `127.0.0.1:<port>`, which uses plain http (Deviation D-1). One operator-run journey goes against real Jira Cloud.
 
 ## Development Sequencing
 
@@ -507,10 +506,8 @@ documents how each affects this source.
   `maxResults` 5000.
 - State capacity is about 2,500 keys at 16 KiB (bounded by step 7's exact encode check).
 - Node.js ≥ 22 at runtime; `@compozy/extension-sdk` pinned to `0.7.0` (floor CompozyOS 0.7.0).
-- `JIRA_BASE_URL` (test-only, undocumented): when set, it replaces `https://<site>` so E2E can target
-  the fake server. It is not declared in `requires_env`, so it cannot be bound through secrets. S1
-  confirms whether undeclared env reaches the subprocess. If it does not, E2E uses a localhost TLS
-  fake instead.
+- ~~`JIRA_BASE_URL` (test-only, undocumented)~~: superseded by Deviation D-1. Undeclared env does not
+  reach the extension subprocess, so a loopback `site` with an explicit port targets the fake Jira.
 - Local install of a built generation uses `compozy extension install ./dist/gen-<hash>` (S1 confirms
   the exact verb; `compozy extension dev` is the fallback).
 - License: MIT (user decision Q4). This spec is committed to the repository (Q5).
@@ -521,3 +518,30 @@ documents how each affects this source.
 - [ADR-001: Detect "newly matching" by diffing full key sets](adrs/adr-001.md). Exact for any JQL,
   bounded by state capacity.
 - [ADR-002: TypeScript on Node.js for portability](adrs/adr-002.md). One artifact for Linux and macOS.
+
+## Deviations
+
+- **D-1 (2026-11-14, conductor, recorded before S1 coding): a loopback `site` replaces `JIRA_BASE_URL`.**
+  CompozyOS 0.7.0 builds the extension subprocess environment from a fixed allowlist (`PATH`, `HOME`,
+  `USER`, `TMPDIR`, `LANG`, and similar; `internal/extension/manager.go` `safeSubprocessEnvKeys`),
+  the manifest's subprocess env table, and bound `requires_env` secrets. Binding an undeclared
+  variable is refused (`ErrExtensionEnvBindingUndeclared`). So an undeclared `JIRA_BASE_URL` never
+  reaches the extension. A localhost TLS fake would need `NODE_EXTRA_CA_CERTS`, which is filtered
+  the same way.
+  Change: `site` also accepts `127.0.0.1:<port>` or `localhost:<port>` (loopback with an explicit
+  port; see the params schema). Such a site uses `http://<site>` as the API base URL and in item
+  URLs. Every other site uses `https://<site>`. The extension reads no `JIRA_BASE_URL`. The UT-004
+  rejections (`https://acme.atlassian.net`, `acme`, `acme.atlassian.net/jira`) stay the same, and a
+  non-loopback host with a port is still rejected. The README mentions the loopback form only as a
+  local testing aid. This keeps E2E-002 and E2E-004 runnable against the published artifact without
+  a daemon restart or config change.
+
+- **D-2 (2026-11-14, found in S1): the build does not stamp the 0.7.0 floor from the SDK version.**
+  TS SDK 0.7.0 hardcodes `SDK_MIN_COMPOZY_VERSION = "0.3.0-beta.1"`
+  (`sdk/typescript/src/extension-contract.ts:24`), and `compozy extension build` copies the describe
+  payload's floor into `extension.toml` (`internal/extension/build_describe.go:54`). To keep the
+  user's 0.7.0 floor decision, `src/index.ts` overrides `describe()` and sets
+  `min_compozy_version = "0.7.0"` explicitly (UT-060 asserts the generated manifest). The build also
+  sorts `requires_env`, so the manifest lists `["JIRA_API_TOKEN", "JIRA_EMAIL"]`; UT-060 compares the
+  set, not the order. UT-060's real-build case is skipped when the `compozy` CLI is absent (CI); the
+  describe-payload case always runs.
