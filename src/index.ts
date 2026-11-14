@@ -38,23 +38,18 @@ export function createPollHandler(deps: JiraExtensionDeps = {}) {
   const env = deps.env ?? process.env;
   const stderr = deps.stderr ?? process.stderr;
   return async (request: HeartbeatSourceRequest): Promise<HeartbeatSourceResult> => {
-    let redact = (text: string) => text;
     try {
       const params = resolveParams(request.params);
       const credentials = resolveCredentials(env);
-      redact = redactor(credentials);
       const client = createJiraClient(params.site, credentials, { fetch: deps.fetch });
-      return await pollJiraIssues(request, { client, params, redact });
+      return await pollJiraIssues(request, { client, params, redact: redactor(credentials) });
     } catch (error) {
-      let failure =
+      // Error text is redacted once, where the client copies external text in and before it is
+      // clipped; every other error message is fixed text, so nothing is re-redacted here.
+      const failure =
         error instanceof SourceError
           ? error
           : sourceError("source_extension_failed", "Jira source failed unexpectedly");
-      // Last line of defense: no outward message carries the bound token, whatever the path.
-      const message = redact(failure.message);
-      if (message !== failure.message) {
-        failure = sourceError(failure.data!.code, message, failure.httpStatus);
-      }
       // Code and HTTP status only: never the token, the JQL results, or issue text.
       stderr.write(
         `jira/issues poll failed: code=${failure.data?.code} status=${failure.httpStatus ?? "-"}\n`

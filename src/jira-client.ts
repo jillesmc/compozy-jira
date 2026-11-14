@@ -64,13 +64,40 @@ function basicCredential(credentials: JiraCredentials): string {
   return Buffer.from(`${credentials.email}:${credentials.apiToken}`).toString("base64");
 }
 
+const MARKER = "[redacted]";
+
 /**
  * Replaces the bound token, raw or as the base64 Basic credential, with `[redacted]`. Jira may echo
- * request input back, so every outward string (errors and items) passes through this.
+ * request input back, so every outward Jira-sourced string (errors and items) passes through this.
+ * Every occurrence of either form is found in the original text and overlapping or adjacent spans
+ * merge into one marker, so neither form can leave a decodable remnant of the other. Existing
+ * markers are kept verbatim, which makes it idempotent.
  */
 export function redactor(credentials: JiraCredentials): (text: string) => string {
-  const secrets = [credentials.apiToken, basicCredential(credentials)];
-  return text => secrets.reduce((out, secret) => out.split(secret).join("[redacted]"), text);
+  const secrets = [credentials.apiToken, basicCredential(credentials)].filter(Boolean);
+  const redactSegment = (text: string): string => {
+    const spans: Array<[number, number]> = [];
+    for (const secret of secrets) {
+      for (let at = text.indexOf(secret); at >= 0; at = text.indexOf(secret, at + 1)) {
+        spans.push([at, at + secret.length]);
+      }
+    }
+    spans.sort((a, b) => a[0] - b[0]);
+    const merged: Array<[number, number]> = [];
+    for (const [start, end] of spans) {
+      const last = merged.at(-1);
+      if (last && start <= last[1]) last[1] = Math.max(last[1], end);
+      else merged.push([start, end]);
+    }
+    let out = "";
+    let cursor = 0;
+    for (const [start, end] of merged) {
+      out += text.slice(cursor, start) + MARKER;
+      cursor = end;
+    }
+    return out + text.slice(cursor);
+  };
+  return text => text.split(MARKER).map(redactSegment).join(MARKER);
 }
 
 export function createJiraClient(
@@ -170,7 +197,8 @@ function httpError(
         ...(Array.isArray(body?.errorMessages) ? body.errorMessages : []),
         ...(body?.errors && typeof body.errors === "object" ? Object.values(body.errors) : []),
       ].filter((m): m is string => typeof m === "string");
-      const text = redact(messages.join(" ") || "Bad Request").slice(0, 300);
+      // Redact once, before the 300-character bound; nothing re-touches the clipped text.
+      const text = (messages.length > 0 ? redact(messages.join(" ")) : "Bad Request").slice(0, 300);
       return sourceError("source_params_invalid", `Jira rejected the JQL: ${text}`, status);
     }
     case 401:
@@ -186,13 +214,13 @@ function httpError(
         status
       );
     case 404:
-      return sourceError("source_params_invalid", `no Jira Cloud site at ${site}`, status);
+      return sourceError("source_params_invalid", `no Jira Cloud site at ${redact(site)}`, status);
     case 429:
       return sourceError("source_rate_limited", "Jira rate limit reached; retry later", status);
     default:
       return sourceError(
         "source_extension_failed",
-        redact(`Jira request failed: ${status} ${response.statusText}`.trim()),
+        `Jira request failed: ${status} ${redact(response.statusText)}`.trim(),
         status
       );
   }
