@@ -19,10 +19,19 @@ creates, edits, transitions, or comments on issues.
 ## Install
 
 ```bash
-compozy extension install github:jillesmc/compozy-jira@v0.1.0
+compozy extension install github:jillesmc/compozy-jira@v0.1.0 --allow-unverified --yes
 ```
 
-Upgrade later with `compozy extension update jira`.
+The consent flags are required: GitHub installs are not catalog-verified, so CompozyOS refuses them
+with `extension_checksum_unverified` unless you pass `--allow-unverified` (`--yes` skips the prompt).
+The release's `.sha256` sidecar is still checked for integrity, and `--expected-digest <sha256>` pins
+the exact archive you reviewed.
+
+Upgrade later with the same consent (an update of a GitHub install passes the same trust check):
+
+```bash
+compozy extension update jira --allow-unverified --yes
+```
 
 ## Bind your Jira credentials
 

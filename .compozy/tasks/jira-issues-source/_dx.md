@@ -134,7 +134,7 @@ No new verbs. The extension participates in these existing commands:
 | `compozy agent heartbeat validate <agent> --file HEARTBEAT.md`             | Validates the file structure (ids, kinds); `with` values are checked at poll time. |
 | `compozy agent instance check <agent> --dry-run`                           | Polls without committing state; surfaces parameter errors.      |
 | `compozy agent instance show <agent>`                                      | `Sources` block shows `my-jira  jira/issues  ok  0 items  polled 15:00` or the failing code. |
-| `compozy extension update jira`                                            | Picks up a newer tag.                                           |
+| `compozy extension update jira --allow-unverified --yes`                   | Picks up a newer tag (same consent as the GitHub install, D-7). |
 
 The daemon validates `with` against the source's params schema before calling the extension, so an
 unknown key or wrong type fails the poll (dry run included) with `source_params_invalid`:
