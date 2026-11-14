@@ -566,3 +566,10 @@ documents how each affects this source.
   item string (title, summary, attributes) before clipping, so reflected Jira text cannot return it.
   The `_dx.md` Golden Path now says the uncommitted preview returns 0 items or only the `backfill`
   matches, and that the new issue appears only after the first real check completed.
+- **D-7 (2026-11-14, found in E2E-004): GitHub installs need explicit consent.** CompozyOS 0.7.0
+  refuses `compozy extension install github:...` with `extension_checksum_unverified` unless
+  `--allow-unverified` (plus `--yes` for non-interactive use) is passed; only curated catalog
+  installs are checksum-verified. The release's `.sha256` sidecar is still verified (integrity), and
+  `--expected-digest <sha256>` pins the reviewed archive. US-009.AC-1's "one command" is therefore
+  `compozy extension install github:jillesmc/compozy-jira@v0.1.0 --allow-unverified --yes`; `_dx.md`
+  and the README show that form. Curated listing (S4) would remove the flags.

@@ -11,8 +11,9 @@ source (`packages/site/content/docs/guides/watch-new-github-issues.mdx` in compo
 Watch Jira issues newly assigned to you, from install to the first item.
 
 ```bash
-# 1. Install (Node.js 22+ required)
-compozy extension install github:jillesmc/compozy-jira@v0.1.0
+# 1. Install (Node.js 22+ required). GitHub installs are not catalog-verified, so CompozyOS
+#    requires explicit consent; the release's .sha256 sidecar is still checked.
+compozy extension install github:jillesmc/compozy-jira@v0.1.0 --allow-unverified --yes
 
 # 2. Bind Jira Cloud credentials (hidden prompt; create the token at
 #    https://id.atlassian.com/manage-profile/security/api-tokens)
@@ -126,7 +127,7 @@ No new verbs. The extension participates in these existing commands:
 
 | Command                                                                    | What changes                                                    |
 | -------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| `compozy extension install github:jillesmc/compozy-jira@v0.1.0`            | Installs `jira` 0.1.0.                                          |
+| `compozy extension install github:jillesmc/compozy-jira@v0.1.0 --allow-unverified --yes` | Installs `jira` 0.1.0 (consent flags are required for GitHub installs). |
 | `compozy extension secrets set jira --env JIRA_EMAIL` / `--env JIRA_API_TOKEN` | Binds credentials (hidden input).                               |
 | `compozy extension status jira -o json`                                    | Shows health and secret presence (`JIRA_EMAIL`, `JIRA_API_TOKEN`), never values. |
 | `compozy agent heartbeat sources <agent>`                                  | Lists `jira/issues  New Jira issues  extension jira`.           |
