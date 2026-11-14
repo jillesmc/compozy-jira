@@ -1,0 +1,18 @@
+{
+  "key": "PLAT-1201",
+  "title": "PLAT-1201 Checkout fails on Pix",
+  "summary": "Bug · To Do · High · assignee: Unassigned · reporter: Ana Souza · created 2026-11-14 09:12 UTC",
+  "url": "https://your-company.atlassian.net/browse/PLAT-1201",
+  "attributes": {
+    "project": "PLAT",
+    "issue_type": "Bug",
+    "status": "To Do",
+    "status_category": "To Do",
+    "priority": "High",
+    "assignee": null,
+    "reporter": "Ana Souza",
+    "labels": ["checkout", "pix"],
+    "created": "2026-11-14T09:12:44.000Z",
+    "updated": "2026-11-14T09:15:02.000Z"
+  }
+}

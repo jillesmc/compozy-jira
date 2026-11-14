@@ -1,0 +1,15 @@
+{
+  "key": "PLAT-1201",
+  "fields": {
+    "summary": "Checkout fails on Pix",
+    "project": { "key": "PLAT", "name": "Platform" },
+    "issuetype": { "name": "Bug" },
+    "status": { "name": "To Do", "statusCategory": { "name": "To Do" } },
+    "priority": { "name": "High" },
+    "assignee": null,
+    "reporter": { "displayName": "Ana Souza" },
+    "labels": ["checkout", "pix"],
+    "created": "2026-11-14T06:12:44.000-0300",
+    "updated": "2026-11-14T06:15:02.000-0300"
+  }
+}
