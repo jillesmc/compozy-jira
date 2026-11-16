@@ -11,8 +11,9 @@ import { SourceError, sourceError } from "./errors.js";
 import { createJiraClient, redactor, resolveCredentials } from "./jira-client.js";
 import { PARAMS_SCHEMA, resolveParams } from "./params.js";
 import { pollJiraIssues } from "./poll.js";
+import { trustSystemCertificates } from "./system-ca.js";
 
-export const EXTENSION_VERSION = "0.1.0";
+export const EXTENSION_VERSION = "0.1.1";
 /**
  * Supported CompozyOS floor (user decision: SDK pinned to 0.7.0, one supported baseline). The TS SDK
  * 0.7.0 describe payload still carries its stale built-in floor "0.3.0-beta.1", and
@@ -89,5 +90,7 @@ export function createExtension(
 
 const entryPoint = process.argv[1];
 if (entryPoint && import.meta.url === pathToFileURL(entryPoint).href) {
+  // Before any request: company hosts behind TLS inspection need the OS CA store.
+  trustSystemCertificates();
   void createExtension().start();
 }

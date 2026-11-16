@@ -19,7 +19,7 @@ creates, edits, transitions, or comments on issues.
 ## Install
 
 ```bash
-compozy extension install github:jillesmc/compozy-jira@v0.1.0 --allow-unverified --yes
+compozy extension install github:jillesmc/compozy-jira@v0.1.1 --allow-unverified --yes
 ```
 
 The consent flags are required: GitHub installs are not catalog-verified, so CompozyOS refuses them
@@ -245,8 +245,14 @@ page. A failed check never changes state; the daemon retries from the previous s
 | Jira unreachable or 5xx                           | `source_extension_failed`   | `Jira request failed: 503 Service Unavailable`                                                                                  |
 | The whole poll exceeds the daemon's deadline      | `source_timeout`            | daemon-owned message                                                                                                            |
 | Node.js missing or older than 22                  | extension start failure     | `compozy extension status jira` shows the subprocess start error                                                                |
+| TLS inspection CA not trusted (Netskope, Zscaler) | `source_extension_failed`   | `Jira request failed: TLS certificate not trusted (SELF_SIGNED_CERT_IN_CHAIN); install the network's CA in the operating system store` |
 
 The email in the 401 message is your bound `JIRA_EMAIL`; the token never appears.
+
+**Corporate TLS inspection.** CompozyOS starts extensions without your shell's `NODE_EXTRA_CA_CERTS`, so
+the extension trusts the operating system CA store itself (Node.js 22.19+ or 24.5+). If your company
+re-signs Jira traffic (Netskope, Zscaler), install its CA in the OS store (`/usr/local/share/ca-certificates`
+plus `update-ca-certificates` on Debian/Ubuntu, the System keychain on macOS).
 
 Troubleshooting:
 

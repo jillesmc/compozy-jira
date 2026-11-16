@@ -1,5 +1,6 @@
 import { ListingLimitError, sourceError } from "./errors.js";
 import { siteBaseUrl } from "./params.js";
+import { networkFailureReason } from "./system-ca.js";
 
 export interface JiraCredentials {
   email: string;
@@ -128,11 +129,11 @@ export function createJiraClient(
       });
       // The body read shares the request's abort and timeout handling.
       text = await response.text();
-    } catch {
+    } catch (error) {
       if (signal.aborted) throw signal.reason;
       throw sourceError(
         "source_extension_failed",
-        `Jira request failed: ${timeout.aborted ? `no answer within ${timeoutMs / 1000}s` : "network error"}`
+        `Jira request failed: ${timeout.aborted ? `no answer within ${timeoutMs / 1000}s` : networkFailureReason(error)}`
       );
     }
     if (!response.ok) throw httpError(response, parseJson(text), site, credentials.email, redact);

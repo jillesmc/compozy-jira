@@ -573,3 +573,12 @@ documents how each affects this source.
   `--expected-digest <sha256>` pins the reviewed archive. US-009.AC-1's "one command" is therefore
   `compozy extension install github:jillesmc/compozy-jira@v0.1.0 --allow-unverified --yes`; `_dx.md`
   and the README show that form. Curated listing (S4) would remove the flags.
+- **D-8 (2026-11-15, found in E2E-003, recorded before coding): trust the OS CA store.** On a
+  network with TLS inspection (Netskope) the Jira host is re-signed by a corporate CA that only the
+  operating system store holds. CompozyOS 0.7.1 starts extension subprocesses with a scrubbed
+  environment, so `NODE_EXTRA_CA_CERTS` from the user's shell never reaches the extension, and every
+  request failed as `Jira request failed: network error` (`SELF_SIGNED_CERT_IN_CHAIN`). Startup now
+  adds the OS CA store to Node's default roots (`tls.setDefaultCACertificates`, Node 22.19+/24.5+;
+  older runtimes keep the bundled roots). A failed request names its cause: `TLS certificate not
+  trusted (<code>)` for certificate errors, `network error (<code>)` otherwise. `src/system-ca.ts`
+  owns both; it does no network I/O.
